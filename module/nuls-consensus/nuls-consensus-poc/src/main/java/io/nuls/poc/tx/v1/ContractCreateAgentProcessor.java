@@ -18,6 +18,11 @@ import io.nuls.poc.utils.validator.TxValidator;
 
 import java.util.*;
 
+/**
+ * 智能合约创建节点交易处理器
+ * @author tag
+ * @date 2019/6/1
+ */
 @Component("ContractCreateAgentProcessorV1")
 public class ContractCreateAgentProcessor implements TransactionProcessor {
     @Autowired
@@ -89,6 +94,7 @@ public class ContractCreateAgentProcessor implements TransactionProcessor {
                     chain.getLogger().info("Repeated transactions");
                 }
             }catch (Exception e){
+                invalidTxList.add(contractCreateAgentTx);
                 chain.getLogger().error("Intelligent Contract Creation Node Transaction Verification Failed");
                 chain.getLogger().error(e);
             }

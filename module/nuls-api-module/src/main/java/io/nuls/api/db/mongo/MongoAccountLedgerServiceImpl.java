@@ -7,11 +7,13 @@ import io.nuls.api.constant.DBTableConstant;
 import io.nuls.api.db.AccountLedgerService;
 import io.nuls.api.manager.CacheManager;
 import io.nuls.api.model.po.db.AccountLedgerInfo;
+import io.nuls.api.model.po.db.AssetInfo;
 import io.nuls.api.utils.DocumentTransferTool;
 import io.nuls.core.core.annotation.Autowired;
 import io.nuls.core.core.annotation.Component;
 import org.bson.Document;
 import org.bson.conversions.Bson;
+import org.checkerframework.checker.units.qual.A;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -70,6 +72,26 @@ public class MongoAccountLedgerServiceImpl implements AccountLedgerService {
         for (AccountLedgerInfo ledgerInfo : accountLedgerInfoMap.values()) {
             cache.addAccountLedgerInfo(ledgerInfo);
         }
+    }
+
+    @Override
+    public List<AccountLedgerInfo> getAccountLedgerInfoList(int chainId, String address) {
+        Bson filter = Filters.eq("address", address);
+        List<Document> documentList = mongoDBService.query(DBTableConstant.ACCOUNT_LEDGER_TABLE + chainId, filter);
+        List<AccountLedgerInfo> accountLedgerInfoList = new ArrayList<>();
+
+        for (Document document : documentList) {
+            if (document.getInteger("chainId") != chainId) {
+                continue;
+            }
+            AccountLedgerInfo ledgerInfo = DocumentTransferTool.toInfo(document, "key", AccountLedgerInfo.class);
+            accountLedgerInfoList.add(ledgerInfo);
+        }
+        if (accountLedgerInfoList.isEmpty()) {
+            AccountLedgerInfo accountLedgerInfo = new AccountLedgerInfo(address, ApiContext.defaultChainId, ApiContext.defaultAssetId);
+            accountLedgerInfoList.add(accountLedgerInfo);
+        }
+        return accountLedgerInfoList;
     }
 
     @Override

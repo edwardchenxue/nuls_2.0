@@ -20,7 +20,11 @@ import io.nuls.poc.utils.manager.ChainManager;
 import io.nuls.poc.utils.validator.TxValidator;
 
 import java.util.*;
-
+/**
+ * 停止节点交易处理器
+ * @author tag
+ * @date 2019/6/1
+ */
 @Component("StopAgentProcessorV1")
 public class StopAgentProcessor implements TransactionProcessor {
     @Autowired
@@ -107,6 +111,7 @@ public class StopAgentProcessor implements TransactionProcessor {
                     }
                 }
             }catch (Exception e){
+                invalidTxList.add(stopAgentTx);
                 chain.getLogger().error(e);
             }
         }

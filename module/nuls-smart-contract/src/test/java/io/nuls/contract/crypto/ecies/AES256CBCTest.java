@@ -21,24 +21,27 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+package io.nuls.contract.crypto.ecies;
 
-package io.nuls.transaction.threadpool;
+import io.nuls.core.crypto.AESEncrypt;
+import io.nuls.core.crypto.EncryptedData;
+import io.nuls.core.crypto.HexUtil;
+import org.bouncycastle.crypto.params.KeyParameter;
+import org.junit.Test;
 
 /**
- * @author: Charlie
- * @date: 2019/5/5
+ * @author: PierreLuo
+ * @date: 2019-06-01
  */
-public interface NetTxThreadPool {
+public class AES256CBCTest {
 
-    /**
-     * 有新交易时添加job
-     * @param netTxProcessJob
-     */
-    void execute(NetTxProcessJob netTxProcessJob);
-
-    /**
-     * 重新处理交易, 加入队列最前端(协议升级等)
-     * @param netTxProcessJob
-     */
-    void addFirst(NetTxProcessJob netTxProcessJob);
+    @Test
+    public void test() {
+        // 0da59e256e2ab8e510bfd90e020264e396e6d4e028d2c6f565810c58e7c9eb7d785ac461b5c8607c39ec4f63e1004f19a77c371e6f91293f66d4c19c02524265
+        EncryptedData encrypt = AESEncrypt.encrypt("test".getBytes(), new byte[16],
+                new KeyParameter(HexUtil.decode("0da59e256e2ab8e510bfd90e020264e396e6d4e028d2c6f565810c58e7c9eb7d")));
+        System.out.println(HexUtil.encode(encrypt.getInitialisationVector()));
+        System.out.println(HexUtil.encode(encrypt.getEncryptedBytes()));
+        // aes256-cbc hex string: b4d6ecbd61b3630abf609e102fcbd125
+    }
 }

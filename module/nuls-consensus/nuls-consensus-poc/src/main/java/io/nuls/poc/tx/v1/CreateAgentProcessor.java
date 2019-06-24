@@ -17,7 +17,11 @@ import io.nuls.poc.utils.manager.ChainManager;
 import io.nuls.poc.utils.validator.TxValidator;
 
 import java.util.*;
-
+/**
+ * 创建节点处理器
+ * @author tag
+ * @date 2019/6/1
+ */
 @Component("CreateAgentProcessorV1")
 public class CreateAgentProcessor implements TransactionProcessor {
     @Autowired
@@ -102,6 +106,7 @@ public class CreateAgentProcessor implements TransactionProcessor {
                     chain.getLogger().info("Repeated transactions");
                 }
             }catch (Exception e){
+                invalidTxList.add(createAgentTx);
                 chain.getLogger().error("Intelligent Contract Creation Node Transaction Verification Failed");
                 chain.getLogger().error(e);
             }

@@ -19,7 +19,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
+/**
+ * 委托交易处理器
+ * @author tag
+ * @date 2019/6/1
+ */
 @Component("DepositProcessorV1")
 public class DepositProcessor implements TransactionProcessor {
     @Autowired
@@ -57,6 +61,7 @@ public class DepositProcessor implements TransactionProcessor {
                     chain.getLogger().info("Conflict between Intelligent Delegation Transaction and Red Card Transaction or Stop Node Transaction");
                 }
             }catch (Exception e){
+                invalidTxList.add(depositTx);
                 chain.getLogger().error(e);
             }
         }

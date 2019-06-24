@@ -22,49 +22,16 @@
  * SOFTWARE.
  *
  */
+package io.nuls.ledger.rpc.call;
 
-package io.nuls.transaction.utils;
 
-import com.google.common.hash.BloomFilter;
-import com.google.common.hash.Funnels;
-
-import java.util.concurrent.atomic.AtomicInteger;
+import io.nuls.base.data.Block;
 
 /**
- * 向量清单过滤器
- *
- * @author: qinyifeng
- * @date: 2018/12/26
- */
-public class InventoryFilter {
-
-    private final int elements;
-    private AtomicInteger size = new AtomicInteger(0);
-
-    private BloomFilter<byte[]> filter;
-
-    public InventoryFilter(int elements) {
-        this.elements = elements;
-        filter = BloomFilter.create(Funnels.byteArrayFunnel(), elements, 0.00001);
-    }
-
-    public BloomFilter getFilter() {
-        return filter;
-    }
-
-    public void insert(byte[] object) {
-        filter.put(object);
-        int count = size.incrementAndGet();
-        if (count >= elements - 100) {
-            this.clear();
-        }
-    }
-
-    public boolean contains(byte[] object) {
-        return filter.mightContain(object);
-    }
-
-    public void clear() {
-        filter = BloomFilter.create(Funnels.byteArrayFunnel(), elements, 0.00001);
-    }
+ * @author lan
+ * @description 调用外部区块模块接口
+ * @date 2018/12/07
+ **/
+public interface CallRpcService {
+    Block getBlockByHeight(int chainId, long height);
 }

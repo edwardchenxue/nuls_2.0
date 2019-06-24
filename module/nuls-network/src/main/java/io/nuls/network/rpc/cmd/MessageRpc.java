@@ -137,15 +137,12 @@ public class MessageRpc extends BaseCmd {
             for (Node node : nodesCollection) {
                 if (!excludeNodes.contains(NetworkConstant.COMMA + node.getId() + NetworkConstant.COMMA)) {
                     nodes.add(node);
-                    /*begin test code*/
-//                    LoggerUtil.modulesMsgLogs(cmd, node, messageBody, "send");
-                    /*end test code*/
                 }
             }
             if (0 == nodes.size()) {
                 rtMap.put("value", false);
             } else {
-                MessageTestUtil.sendMessage(cmd);
+//                MessageTestUtil.sendMessage(cmd);
                 messageManager.broadcastToNodes(message, nodes, true);
             }
         } catch (Exception e) {
@@ -229,9 +226,6 @@ public class MessageRpc extends BaseCmd {
             String nodes = String.valueOf(params.get("nodes"));
             byte[] messageBody = RPCUtil.decode(String.valueOf(params.get("messageBody")));
             String cmd = String.valueOf(params.get("command"));
-            if (cmd.equalsIgnoreCase("getBlocks")) {
-                LoggerUtil.logger(chainId).debug("sendPeersMsg, nodes-{}", nodes);
-            }
             MessageManager messageManager = MessageManager.getInstance();
             NodeGroupManager nodeGroupManager = NodeGroupManager.getInstance();
             NodeGroup nodeGroup = nodeGroupManager.getNodeGroupByChainId(chainId);
@@ -255,7 +249,7 @@ public class MessageRpc extends BaseCmd {
                     LoggerUtil.logger(chainId).error("node = {} is not available!", nodeId);
                 }
             }
-            MessageTestUtil.sendMessage(cmd);
+//            MessageTestUtil.sendMessage(cmd);
             NetworkEventResult networkEventResult = messageManager.broadcastToNodes(message, nodesList, true);
         } catch (Exception e) {
             Log.error(e);
