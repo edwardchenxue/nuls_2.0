@@ -32,14 +32,6 @@ public interface TxService {
     boolean register(Chain chain, ModuleTxRegisterDTO moduleTxRegisterDto);
 
     /**
-     * 取消模块注册的交易
-     *
-     * @param moduleCode 要取消注册的模块
-     * @return boolean
-     */
-    boolean unregister(Chain chain, String moduleCode);
-
-    /**
      * 收到一个新的交易
      * Received a new transaction
      *
@@ -120,12 +112,11 @@ public interface TxService {
      * @param endtimestamp 获取交易截止时间
      * @param maxTxDataSize
      * @param blockTime 区块时间
-     * @param blockHeight 打包高度
      * @param packingAddress
      * @param preStateRoot
      * @return
      */
-    TxPackage getPackableTxs(Chain chain, long endtimestamp, long maxTxDataSize, long blockTime, long blockHeight,
+    TxPackage getPackableTxs(Chain chain, long endtimestamp, long maxTxDataSize, long blockTime,
                              String packingAddress, String preStateRoot);
 
     /**

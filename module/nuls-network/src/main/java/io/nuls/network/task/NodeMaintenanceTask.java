@@ -25,6 +25,7 @@
 package io.nuls.network.task;
 
 import io.nuls.core.log.Log;
+import io.nuls.core.rpc.modulebootstrap.RpcModuleState;
 import io.nuls.network.cfg.NetworkConfig;
 import io.nuls.network.constant.NodeConnectStatusEnum;
 import io.nuls.network.manager.ConnectionManager;
@@ -54,6 +55,10 @@ public class NodeMaintenanceTask implements Runnable {
     @Override
     public void run() {
         try {
+            if(!ConnectionManager.getInstance().isRunning()){
+                LoggerUtil.COMMON_LOG.info("ConnectionManager is not running.");
+                return;
+            }
             List<NodeGroup> list = NodeGroupManager.getInstance().getNodeGroups();
             Collections.shuffle(list);
             for (NodeGroup nodeGroup : list) {
@@ -62,7 +67,7 @@ public class NodeMaintenanceTask implements Runnable {
             }
 
         } catch (Exception e) {
-           Log.error(e);
+           LoggerUtil.COMMON_LOG.error(e);
         }
     }
 
@@ -120,6 +125,10 @@ public class NodeMaintenanceTask implements Runnable {
                     nodeGroup.getLocalNetNodeContainer().getCanConnectNodes().remove(node.getId());
                     break;
                 }
+            }
+            if(node.getConnectStatus() == NodeConnectStatusEnum.CONNECTING){
+                LoggerUtil.COMMON_LOG.info("{} is in connecting",node.getId());
+                nodeList.remove(node);
             }
         }
         //最大需要连接的数量 大于 可用连接数的时候，直接返回可用连接数，否则进行选择性返回

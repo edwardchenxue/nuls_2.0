@@ -379,6 +379,7 @@ public class ChainServiceImpl implements ChainService {
         }
         List<PunishLogDTO> yellowPunishList = null;
         List<PunishLogDTO> redPunishList = null;
+        int typeOfYellow = 2;
         //查询红牌交易
         if (type != 1) {
             redPunishList = new ArrayList<>();
@@ -388,7 +389,8 @@ public class ChainServiceImpl implements ChainService {
                 }
                 redPunishList.add(new PunishLogDTO(po));
             }
-        } else if (type != 2) {
+        }
+        if (type != typeOfYellow) {
             yellowPunishList = new ArrayList<>();
             for (PunishLogPo po : chain.getYellowPunishList()) {
                 if (StringUtils.isNotBlank(address) && !ByteUtils.arrayEquals(po.getAddress(), AddressTool.getAddress(address))) {
@@ -491,13 +493,37 @@ public class ChainServiceImpl implements ChainService {
             return Result.getFailed(ConsensusErrorCode.CHAIN_NOT_EXIST);
         }
         ConfigBean configBean = chain.getConfig();
-        Map<String, Object> map = new HashMap<>();
+        Map<String, Object> map = new HashMap<>(8);
         map.put("seedNodes", configBean.getSeedNodes());
         map.put("inflationAmount", configBean.getInflationAmount());
         map.put("agentAssetId", configBean.getAgentAssetId());
         map.put("agentChainId", configBean.getAgentChainId());
         map.put("awardAssetId", configBean.getAwardAssetId());
         return Result.getSuccess(ConsensusErrorCode.SUCCESS).setData(map);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public Result getAgentChangeInfo(Map<String, Object> params) {
+        if (params == null || params.get(ConsensusConstant.PARAM_CHAIN_ID) == null || params.get(ConsensusConstant.CURRENT_ROUND) == null) {
+            return Result.getFailed(ConsensusErrorCode.PARAM_ERROR);
+        }
+        int chainId = (Integer) params.get(ConsensusConstant.PARAM_CHAIN_ID);
+        if (chainId <= ConsensusConstant.MIN_VALUE) {
+            return Result.getFailed(ConsensusErrorCode.PARAM_ERROR);
+        }
+        Chain chain = chainManager.getChainMap().get(chainId);
+        if (chain == null) {
+            return Result.getFailed(ConsensusErrorCode.CHAIN_NOT_EXIST);
+        }
+        BlockExtendsData lastExtendsData = null;
+        String lastRoundStr = (String)params.get(ConsensusConstant.LAST_ROUND);
+        if(lastRoundStr != null){
+            lastExtendsData = new BlockExtendsData(RPCUtil.decode(lastRoundStr));
+        }
+        String currentRoundStr = (String)params.get(ConsensusConstant.CURRENT_ROUND);
+        BlockExtendsData currentExtendsData = new BlockExtendsData(RPCUtil.decode(currentRoundStr));
+        return Result.getSuccess(ConsensusErrorCode.SUCCESS).setData(roundManager.getAgentChangeInfo(chain, lastExtendsData, currentExtendsData));
     }
 
     /**
@@ -577,4 +603,29 @@ public class ChainServiceImpl implements ChainService {
         }
     }
 
+    /**
+     * 获取种子节点列表
+     *
+     * @param params
+     * @return Result
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public Result getSeedNodeList(Map<String, Object> params) {
+        if (params == null || params.get(ConsensusConstant.PARAM_CHAIN_ID) == null) {
+            return Result.getFailed(ConsensusErrorCode.PARAM_ERROR);
+        }
+        int chainId = (Integer) params.get(ConsensusConstant.PARAM_CHAIN_ID);
+        if (chainId <= ConsensusConstant.MIN_VALUE) {
+            return Result.getFailed(ConsensusErrorCode.PARAM_ERROR);
+        }
+        Chain chain = chainManager.getChainMap().get(chainId);
+        if (chain == null) {
+            return Result.getFailed(ConsensusErrorCode.CHAIN_NOT_EXIST);
+        }
+        Map<String, Object> resultMap = new HashMap<>(2);
+        resultMap.put("seedNodeList", chain.getConfig().getSeedNodes().split(","));
+        resultMap.put("inflationAmount",chain.getConfig().getInflationAmount().toString());
+        return Result.getSuccess(ConsensusErrorCode.SUCCESS).setData(resultMap);
+    }
 }

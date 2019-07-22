@@ -357,7 +357,6 @@ public class RocksDBManager {
         if (kvs == null || kvs.size() == 0) {
             throw new Exception(DBErrorCode.NULL_PARAMETER);
         }
-
         try (WriteBatch writeBatch = new WriteBatch()) {
             RocksDB db = TABLES.get(table);
             for (Map.Entry<byte[], byte[]> entry : kvs.entrySet()) {
@@ -438,8 +437,8 @@ public class RocksDBManager {
         }
         try {
             RocksDB db = TABLES.get(table);
-            ReadOptions readOptions = new ReadOptions();
-            return db.keyMayExist(readOptions, key, new StringBuilder());
+            boolean rs = db.keyMayExist(key, new StringBuilder());
+            return rs && (db.get(key) != null);
         } catch (Exception e) {
             return false;
         }
@@ -477,21 +476,52 @@ public class RocksDBManager {
      * @return 批量查询结果值字节数组集合
      */
     public static List<byte[]> multiGetValueList(final String table, final List<byte[]> keys) {
+        List<byte[]> list = new ArrayList<>();
         if (!baseCheckTable(table)) {
-            return null;
+            return list;
         }
         if (keys == null || keys.size() == 0) {
-            return null;
+            return list;
         }
         try {
             RocksDB db = TABLES.get(table);
             Map<byte[], byte[]> map = db.multiGet(keys);
             if (map != null && map.size() > 0) {
-                return new ArrayList<>(map.values());
+                list.addAll(map.values());
             }
-            return null;
+            return list;
         } catch (Exception ex) {
-            return null;
+            return list;
+        }
+    }
+
+    /**
+     * 批量查询指定keys的List集合
+     * batch query the List set of the specified keys.
+     *
+     * @param table 数据库表名称
+     * @param keys  批量查询关键字
+     * @return 批量查询结果值字节数组集合
+     */
+    public static List<byte[]> multiGetKeyList(final String table, final List<byte[]> keys) {
+        List<byte[]> list = new ArrayList<>();
+        if (!baseCheckTable(table)) {
+            return list;
+        }
+        if (keys == null || keys.size() == 0) {
+            return list;
+        }
+        try {
+            RocksDB db = TABLES.get(table);
+//            ReadOptions readOptions = new ReadOptions();
+//            readOptions.setVerifyChecksums(false);
+            Map<byte[], byte[]> map = db.multiGet(keys);
+            if (map != null && map.size() > 0) {
+                list.addAll(map.keySet());
+            }
+            return list;
+        } catch (Exception ex) {
+            return list;
         }
     }
 
@@ -578,11 +608,28 @@ public class RocksDBManager {
      */
     private static synchronized Options getCommonOptions(final boolean createIfMissing) {
         Options options = new Options();
+
+        /*
+        options.setMaxBackgroundCompactions(4);
+        options.setMaxBackgroundFlushes(1);
+        options.setMaxOpenFiles(-1);*/
+
+        options.setCreateIfMissing(createIfMissing);
+        options.setAllowMmapReads(true);
+        options.setCompressionType(CompressionType.NO_COMPRESSION);
+        options.setMaxOpenFiles(-1);
+        BlockBasedTableConfig tableOption = new BlockBasedTableConfig();
+        tableOption.setNoBlockCache(true);
+        tableOption.setBlockRestartInterval(4);
+//        tableOption.setIndexType(IndexType.kHashSearch);
+        tableOption.setFilterPolicy(new BloomFilter(10, true));
+        options.setTableFormatConfig(tableOption);
+
+
 //        final Filter bloomFilter = new BloomFilter(10);
 //        final Statistics stats = new Statistics();
         //final RateLimiter rateLimiter = new RateLimiter(10000000, 10000, 10);
 
-        options.setCreateIfMissing(createIfMissing);
 //        .setAllowMmapReads(true).setCreateMissingColumnFamilies(true)
 //                .setStatistics(stats).setMaxWriteBufferNumber(3).setMaxBackgroundCompactions(10);
 
@@ -596,4 +643,6 @@ public class RocksDBManager {
 //        options.setTableFormatConfig(tableOptions);
         return options;
     }
+
+
 }

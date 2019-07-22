@@ -59,8 +59,7 @@ public class LedgerUtil {
         byte[] in = tx.getHash().getBytes();
         int copyEnd = in.length;
         System.arraycopy(in, (copyEnd - 8), out, 0, 8);
-        String nonce8BytesStr = HexUtil.encode(out);
-        return nonce8BytesStr;
+        return HexUtil.encode(out);
     }
 
     public static byte[] getNonceByTx(Transaction tx) {
@@ -76,8 +75,7 @@ public class LedgerUtil {
         byte[] in = HexUtil.decode(txHash);
         int copyEnd = in.length;
         System.arraycopy(in, (copyEnd - 8), out, 0, 8);
-        String nonce8BytesStr = HexUtil.encode(out);
-        return nonce8BytesStr;
+        return HexUtil.encode(out);
     }
 
     public static byte[] getNonceDecodeByTxHash(String txHash) {
@@ -116,14 +114,6 @@ public class LedgerUtil {
     public static boolean isCrossTx(int txType) {
         return txType == TxType.CROSS_CHAIN;
 
-    }
-
-    public static String getAccountNoncesStringKey(CoinFrom from, byte[] nonce) {
-        return AddressTool.getStringAddressByBytes(from.getAddress()) + "-" + from.getAssetsChainId() + "-" + from.getAssetsId() + "-" + getNonceEncode(nonce);
-    }
-
-    public static String getAccountNoncesStringKey(String assetKey, String nonce) {
-        return assetKey + "-" + nonce;
     }
 
     public static String getAccountAssetStrKey(CoinFrom from) {

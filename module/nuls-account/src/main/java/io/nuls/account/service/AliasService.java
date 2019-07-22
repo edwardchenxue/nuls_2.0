@@ -28,9 +28,8 @@ package io.nuls.account.service;
 import io.nuls.account.model.bo.Chain;
 import io.nuls.account.model.bo.tx.txdata.Alias;
 import io.nuls.base.data.Transaction;
+import io.nuls.core.basic.Result;
 import io.nuls.core.exception.NulsException;
-
-import java.math.BigInteger;
 
 /**
  * 账户模块内部功能服务类
@@ -52,17 +51,6 @@ public interface AliasService {
      * @return Transaction
      */
     Transaction setAlias(Chain chain, String address, String password, String aliasName) throws Exception;
-
-    /**
-     * 获取设置别名交易手续费
-     * Gets to set the alias transaction fee
-     *
-     * @param chain
-     * @param address
-     * @param aliasName
-     * @return
-     */
-    BigInteger getAliasFee(Chain chain, String address, String aliasName);
 
     /**
      * get the alias by address
@@ -96,7 +84,7 @@ public interface AliasService {
      * @return the result of validate
      *
      * */
-    boolean aliasTxValidate(int chainId, Transaction transaction) throws Exception;
+    Result aliasTxValidate(int chainId, Transaction transaction) throws NulsException;
 
     /**
      * 别名交易提交

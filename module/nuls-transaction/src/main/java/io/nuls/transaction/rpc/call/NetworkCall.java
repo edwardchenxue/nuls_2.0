@@ -82,14 +82,14 @@ public class NetworkCall {
             params.put("messageBody", RPCUtil.encode(message.serialize()));
             params.put("command", cmd);
             Request request = MessageUtil.newRequest("nw_broadcast", params, Constants.BOOLEAN_FALSE, Constants.ZERO, Constants.ZERO);
-            ResponseMessageProcessor.requestOnly(ModuleE.NW.abbr, request);
-            return true;
+            String messageId = ResponseMessageProcessor.requestOnly(ModuleE.NW.abbr, request);
+            return messageId.equals("0") ? false : true;
         } catch (IOException e) {
-            LOG.error(e);
-            throw new NulsException(TxErrorCode.SERIALIZE_ERROR);
+            LOG.error("message:" + cmd + " failed", e);
+            throw new NulsException(TxErrorCode.TX_BROADCAST_FAIL);
         } catch (Exception e) {
-            LOG.error(e);
-            throw new NulsException(TxErrorCode.SYS_UNKOWN_EXCEPTION);
+            LOG.error("message:" + cmd + " failed", e);
+            throw new NulsException(TxErrorCode.TX_BROADCAST_FAIL);
         }
     }
 
@@ -112,11 +112,11 @@ public class NetworkCall {
             TransactionCall.requestAndResponse(ModuleE.NW.abbr, "nw_sendPeersMsg", params);
             return true;
         } catch (IOException e) {
-            LOG.error(e);
-            throw new NulsException(TxErrorCode.SERIALIZE_ERROR);
+            LOG.error("message:" + cmd + " failed", e);
+            throw new NulsException(TxErrorCode.SEND_MSG_FAIL);
         } catch (RuntimeException e){
-            LOG.error(e);
-            throw new NulsException(TxErrorCode.SYS_UNKOWN_EXCEPTION);
+            LOG.error("message:" + cmd + " failed", e);
+            throw new NulsException(TxErrorCode.SEND_MSG_FAIL);
         }
     }
 
@@ -178,7 +178,21 @@ public class NetworkCall {
         return NetworkCall.broadcast(chain, message, excludeNodes, NW_NEW_HASH);
     }
 
-
+    /**
+     * 广播完整新交易交易到网络中
+     * 只有创建该交易的节点才会直接广播完整交易到网络中，因为其他节点肯定没有该笔交易
+     * Send the complete transaction to the specified node
+     *
+     * @param chain
+     * @param tx
+     * @return
+     */
+    public static boolean broadcastTx(Chain chain, Transaction tx, String excludeNodes) throws NulsException {
+        BroadcastTxMessage message = new BroadcastTxMessage();
+        message.setTx(tx);
+        message.setOriginalSendNanoTime(NulsDateUtils.getNanoTime());
+        return NetworkCall.broadcast(chain, message, excludeNodes, NW_RECEIVE_TX);
+    }
 
     /**
      * 广播完整新交易交易到网络中
@@ -190,11 +204,10 @@ public class NetworkCall {
      * @return
      */
     public static boolean broadcastTx(Chain chain, Transaction tx) throws NulsException {
-        BroadcastTxMessage message = new BroadcastTxMessage();
-        message.setTx(tx);
-        message.setOriginalSendNanoTime(NulsDateUtils.getNanoTime());
-        return NetworkCall.broadcast(chain, message, NW_RECEIVE_TX);
+        return broadcastTx(chain, tx, null);
     }
+
+
 
 
     /**

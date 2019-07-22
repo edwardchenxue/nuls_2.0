@@ -13,12 +13,16 @@ import io.nuls.core.exception.NulsException;
 import io.nuls.core.log.logback.NulsLogger;
 import io.nuls.core.model.StringUtils;
 import io.nuls.core.rpc.util.NulsDateUtils;
+import io.nuls.poc.constant.ConsensusConstant;
 import io.nuls.poc.constant.ConsensusErrorCode;
 import io.nuls.poc.model.bo.BlockData;
 import io.nuls.poc.model.bo.Chain;
 import io.nuls.poc.model.bo.round.MeetingMember;
 import io.nuls.poc.model.bo.round.MeetingRound;
+import io.nuls.poc.model.po.RandomSeedStatusPo;
 import io.nuls.poc.rpc.call.CallMethodUtils;
+import io.nuls.poc.storage.RandomSeedsStorageService;
+import io.nuls.poc.utils.RandomSeedUtils;
 import io.nuls.poc.utils.enumeration.ConsensusStatus;
 import io.nuls.poc.utils.manager.ConsensusManager;
 import io.nuls.poc.utils.manager.RoundManager;
@@ -34,6 +38,7 @@ import java.util.*;
  */
 public class ConsensusProcess {
     private RoundManager roundManager = SpringLiteContext.getBean(RoundManager.class);
+    private RandomSeedsStorageService randomSeedsStorageService = SpringLiteContext.getBean(RandomSeedsStorageService.class);
 
     private NulsLogger consensusLogger;
 
@@ -166,7 +171,8 @@ public class ConsensusProcess {
      * Otherwise, if the block from the previous node has not been received after waiting for a certain time, it will be packed directly.
      */
     private void waitReceiveNewestBlock(Chain chain, MeetingMember self, MeetingRound round) {
-        long timeout = chain.getConfig().getPackingInterval() / 2;
+        int waitRatio = 60;
+        long timeout = chain.getConfig().getPackingInterval() * waitRatio / ConsensusConstant.VALUE_OF_ONE_HUNDRED;
         long endTime = self.getPackStartTime() + timeout;
         boolean hasReceiveNewestBlock;
         if (NulsDateUtils.getCurrentTimeSeconds() >= endTime) {
@@ -269,8 +275,32 @@ public class ConsensusProcess {
         extendsData.setPackingIndexOfRound(self.getPackingIndexOfRound());
         extendsData.setRoundStartTime(round.getStartTime());
         fillProtocol(extendsData, chain.getConfig().getChainId());
+        /*
+         * 添加底层随机数支持
+         */
+        int chainId = chain.getConfig().getChainId();
+        byte[] packingAddress = self.getAgent().getPackingAddress();
+        RandomSeedStatusPo status = randomSeedsStorageService.getAddressStatus(chainId, packingAddress);
+        byte[] seed = ConsensusConstant.EMPTY_SEED;
+        if (null != status && status.getNextSeed() != null) {
+            seed = status.getNextSeed();
+        }
+        extendsData.setSeed(seed);
+        byte[] nextSeed = RandomSeedUtils.createRandomSeed();
+        byte[] nextSeedHash = RandomSeedUtils.getLastDigestEightBytes(nextSeed);
+        extendsData.setNextSeedHash(nextSeedHash);
+        RandomSeedStatusPo po = new RandomSeedStatusPo();
+        po.setAddress(packingAddress);
+        po.setSeedHash(nextSeedHash);
+        po.setNextSeed(nextSeed);
+        po.setHeight(bd.getHeight());
+        RandomSeedUtils.CACHE_SEED = po;
 
-        Map<String, Object> resultMap = CallMethodUtils.getPackingTxList(chain, bd.getTime(), AddressTool.getStringAddressByBytes(self.getAgent().getPackingAddress()));
+        /*
+         * 获取打包的交易
+         */
+        String packingAddressString = AddressTool.getStringAddressByBytes(packingAddress);
+        Map<String, Object> resultMap = CallMethodUtils.getPackingTxList(chain, bd.getTime(), packingAddressString);
         List<Transaction> packingTxList = new ArrayList<>();
 
         /*
@@ -315,7 +345,7 @@ public class ConsensusProcess {
         ConsensusManager consensusManager = SpringLiteContext.getBean(ConsensusManager.class);
         consensusManager.addConsensusTx(chain, bestBlock, packingTxList, self, round, extendsData);
         bd.setTxList(packingTxList);
-        Block newBlock = consensusManager.createBlock(chain, bd, self.getAgent().getPackingAddress());
+        Block newBlock = consensusManager.createBlock(chain, bd, packingAddress, packingAddressString);
         /*
          * 验证打包中途是否收到新区块
          * Verify that new blocks are received halfway through packaging

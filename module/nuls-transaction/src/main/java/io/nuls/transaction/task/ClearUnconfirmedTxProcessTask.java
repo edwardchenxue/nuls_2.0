@@ -39,10 +39,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * 未确认交易脏数据处理
- *
- * @author: qinyifeng
- * @date: 2019/01/24
+ * 未确认交易清理机制
  */
 public class ClearUnconfirmedTxProcessTask implements Runnable {
 
@@ -66,22 +63,12 @@ public class ClearUnconfirmedTxProcessTask implements Runnable {
     }
 
     private void doTask(Chain chain) {
-        List<TransactionUnconfirmedPO> txPOList = unconfirmedTxStorageService.getAllTxPOList(chain.getChainId());
-        if (txPOList == null || txPOList.size() == 0) {
+        List<byte[]> txKeyList = unconfirmedTxStorageService.getAllTxkeyList(chain.getChainId());
+        if (txKeyList == null || txKeyList.size() == 0) {
             return;
         }
-
-        List<Transaction> expireTxList = this.getExpireTxList(txPOList);
-        chain.getLogger().debug("%%%%% Clean %%%%% [UnconfirmedTxProcessTask] expire list size: {}", expireTxList.size());
-        Transaction tx;
-        for (int i = 0; i < expireTxList.size(); i++) {
-            tx = expireTxList.get(i);
-            //如果该未确认交易不在待打包池中，则认为是过期脏数据，需要清理
-            if (!packablePool.exist(chain, tx)) {
-                processTx(chain, tx);
-                chain.getLogger().debug("%%%%% Clean %%%%% [UnconfirmedTxProcessTask] destroy tx - type:{}, - hash:{}", tx.getType(), tx.getHash().toHex());
-            }
-        }
+        int count = processUnconfirmedTxs(txKeyList);
+        chain.getLogger().info("%%%%% Clean %%%%% [UnconfirmedTxProcessTask] expire count: {}", count);
     }
 
     private boolean processTx(Chain chain, Transaction tx) {
@@ -91,6 +78,48 @@ public class ClearUnconfirmedTxProcessTask implements Runnable {
             chain.getLogger().error(e);
         }
         return false;
+    }
+
+    /**
+     * 过滤指定时间内过期的交易
+     *
+     * @param txKeyList
+     * @return expireTxList
+     */
+    private int processUnconfirmedTxs(List<byte[]> txKeyList) {
+        int unconfirmedTxsCount = 0;
+        List<byte[]> queryList = new ArrayList<>();
+        //一次最多处理1W笔
+        for (int i = 0; i < txKeyList.size(); i++) {
+            queryList.add(txKeyList.get(i));
+            if (queryList.size() == 10000) {
+                unconfirmedTxsCount += processExpireTxs(queryList);
+                queryList.clear();
+            }
+        }
+        if(!queryList.isEmpty()){
+            unconfirmedTxsCount += processExpireTxs(queryList);
+        }
+        return unconfirmedTxsCount;
+    }
+
+    public int processExpireTxs(List<byte[]> queryList){
+        //获取未确认的交易
+        List<TransactionUnconfirmedPO> list = unconfirmedTxStorageService.getTransactionUnconfirmedPOList(chain.getChainId(), queryList);
+        //计算出超时的未确认交易
+        List<Transaction> expireTxList = getExpireTxList(list);
+        int count = 0;
+        Transaction tx;
+        for (int i = 0; i < expireTxList.size(); i++) {
+            tx = expireTxList.get(i);
+            //如果该未确认交易不在待打包池中，则认为是过期脏数据，需要清理
+            if (!packablePool.exist(chain, tx)) {
+                processTx(chain, tx);
+                StatisticsTask.clearUnconfirmedTx++;
+                count++;
+            }
+        }
+        return count;
     }
 
     /**

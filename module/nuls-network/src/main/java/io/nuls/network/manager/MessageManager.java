@@ -25,6 +25,7 @@
 package io.nuls.network.manager;
 
 import io.netty.buffer.Unpooled;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.nuls.base.basic.NulsByteBuffer;
 import io.nuls.base.data.BaseNulsData;
@@ -32,6 +33,7 @@ import io.nuls.core.crypto.Sha256Hash;
 import io.nuls.core.exception.NulsException;
 import io.nuls.core.log.Log;
 import io.nuls.core.model.ByteUtils;
+import io.nuls.network.constant.ManagerStatusEnum;
 import io.nuls.network.constant.NetworkConstant;
 import io.nuls.network.constant.NetworkErrorCode;
 import io.nuls.network.constant.NodeConnectStatusEnum;
@@ -48,6 +50,7 @@ import io.nuls.network.model.message.base.BaseMessage;
 import io.nuls.network.model.message.base.MessageHeader;
 import io.nuls.network.utils.LoggerUtil;
 
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -260,9 +263,9 @@ public class MessageManager extends BaseManager {
         NodeGroup nodeGroup = NodeGroupManager.getInstance().getNodeGroupByMagic(message.getHeader().getMagicNumber());
         List<Node> connectNodes = null;
         if (isCross) {
-            connectNodes = new ArrayList<>(nodeGroup.getCrossNodeContainer().getConnectedNodes().values());
+            connectNodes = nodeGroup.getCrossNodeContainer().getAvailableNodes();
         } else {
-            connectNodes = new ArrayList<>(nodeGroup.getLocalNetNodeContainer().getConnectedNodes().values());
+            connectNodes = nodeGroup.getLocalNetNodeContainer().getAvailableNodes();
         }
         if (null != connectNodes && connectNodes.size() > 0) {
             for (Node connectNode : connectNodes) {
@@ -305,15 +308,33 @@ public class MessageManager extends BaseManager {
             MessageHeader header = message.getHeader();
             BaseNulsData body = message.getMsgBody();
             header.setPayloadLength(body.size());
-            ChannelFuture future = node.getChannel().writeAndFlush(Unpooled.wrappedBuffer(message.serialize()));
-            if (!asyn) {
+            if (asyn) {
+                node.getChannel().eventLoop().execute(() -> {
+                    Channel channel = node.getChannel();
+                    if (channel != null) {
+                        try {
+                            if (!channel.isWritable()) {
+                                LoggerUtil.COMMON_LOG.error("#### isWritable=false,send fail.node={},cmd={}", node.getId(), header.getCommandStr());
+
+                            }
+                            channel.writeAndFlush(Unpooled.wrappedBuffer(message.serialize()));
+                        } catch (IOException e) {
+                            LoggerUtil.COMMON_LOG.error(e);
+                        }
+                    }
+
+                });
+            } else {
+                ChannelFuture future = node.getChannel().writeAndFlush(Unpooled.wrappedBuffer(message.serialize()));
                 future.await();
-                if (!future.isSuccess()) {
+                boolean success = future.isSuccess();
+                if (!success) {
                     return new NetworkEventResult(false, NetworkErrorCode.NET_BROADCAST_FAIL);
                 }
             }
+
         } catch (Exception e) {
-            Log.error(e);
+            LoggerUtil.COMMON_LOG.error(e);
             return new NetworkEventResult(false, NetworkErrorCode.NET_MESSAGE_ERROR);
         }
         return new NetworkEventResult(true, NetworkErrorCode.SUCCESS);
@@ -327,15 +348,26 @@ public class MessageManager extends BaseManager {
      * @param asyn
      * @return
      */
-    public NetworkEventResult broadcastToNodes(byte[] message, List<Node> nodes, boolean asyn) {
+    public NetworkEventResult broadcastToNodes(byte[] message, String cmd, List<Node> nodes, boolean asyn) {
         for (Node node : nodes) {
             if (node.getChannel() == null || !node.getChannel().isActive()) {
                 Log.info("broadcastToNodes node={} is not Active", node.getId());
                 continue;
             }
             try {
-                ChannelFuture future = node.getChannel().writeAndFlush(Unpooled.wrappedBuffer(message));
-                if (!asyn) {
+                if (asyn) {
+                    node.getChannel().eventLoop().execute(() -> {
+                        Channel channel = node.getChannel();
+                        if (channel != null) {
+                            if (!channel.isWritable()) {
+                                LoggerUtil.COMMON_LOG.error("#### isWritable=false,node={},cmd={}", node.getId(), cmd);
+                            }
+                            channel.writeAndFlush(Unpooled.wrappedBuffer(message));
+                        }
+
+                    });
+                } else {
+                    ChannelFuture future = node.getChannel().writeAndFlush(Unpooled.wrappedBuffer(message));
                     future.await();
                     boolean success = future.isSuccess();
                     if (!success) {
@@ -358,6 +390,11 @@ public class MessageManager extends BaseManager {
 
     @Override
     public void start() throws Exception {
+
+    }
+
+    @Override
+    public void change(ManagerStatusEnum toStatus) throws Exception {
 
     }
 }

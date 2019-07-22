@@ -25,7 +25,7 @@
 package io.nuls.ledger.manager;
 
 import io.nuls.core.core.annotation.Autowired;
-import io.nuls.core.core.annotation.Service;
+import io.nuls.core.core.annotation.Component;
 import io.nuls.core.core.ioc.SpringLiteContext;
 import io.nuls.core.rockdb.service.RocksDBService;
 import io.nuls.core.rpc.model.ModuleE;
@@ -48,7 +48,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author lanjinsheng
  * @date 2019/02/11
  */
-@Service
+@Component
 public class LedgerChainManager {
     @Autowired
     BlockDataService blockDataService;
@@ -119,7 +119,13 @@ public class LedgerChainManager {
         initRocksDb();
         initLedgerDatas();
     }
-
+     public void syncBlockHeight(){
+         try {
+             blockDataService.syncBlockHeight();
+         } catch (Exception e) {
+             LoggerUtil.COMMON_LOG.error(e);
+         }
+     }
 
     public LedgerChain getChain(int key) {
         return this.chainMap.get(key);

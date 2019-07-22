@@ -6,7 +6,9 @@ import io.nuls.base.data.Transaction;
 import io.nuls.chain.config.NulsChainConfig;
 import io.nuls.chain.info.CmErrorCode;
 import io.nuls.chain.info.CmRuntimeInfo;
+import io.nuls.chain.info.RpcConstants;
 import io.nuls.chain.model.dto.AccountBalance;
+import io.nuls.chain.model.dto.ChainDto;
 import io.nuls.chain.model.dto.RegChainDto;
 import io.nuls.chain.model.po.Asset;
 import io.nuls.chain.model.po.BlockChain;
@@ -19,8 +21,7 @@ import io.nuls.core.constant.ErrorCode;
 import io.nuls.core.core.annotation.Autowired;
 import io.nuls.core.core.annotation.Component;
 import io.nuls.core.exception.NulsRuntimeException;
-import io.nuls.core.rpc.model.CmdAnnotation;
-import io.nuls.core.rpc.model.Parameter;
+import io.nuls.core.rpc.model.*;
 import io.nuls.core.rpc.model.message.Response;
 import io.nuls.core.rpc.util.NulsDateUtils;
 
@@ -48,8 +49,13 @@ public class ChainCmd extends BaseChainCmd {
     @Autowired
     NulsChainConfig nulsChainConfig;
 
-    @CmdAnnotation(cmd = "cm_chain", version = 1.0, description = "get chain detail")
-    @Parameter(parameterName = "chainId", parameterType = "int", parameterValidRange = "[1,65535]")
+
+    @CmdAnnotation(cmd = RpcConstants.CMD_CHAIN, version = 1.0,
+            description = "查看链信息")
+    @Parameters(value = {
+            @Parameter(parameterName = "chainId", requestType = @TypeDescriptor(value = int.class),  parameterValidRange = "[1-65535]", parameterDes = "资产链Id,取值区间[1-65535]"),
+    })
+    @ResponseData(description = "返回链信息", responseType = @TypeDescriptor(value = RegChainDto.class))
     public Response chain(Map params) {
         try {
             int chainId = Integer.parseInt(params.get("chainId").toString());
@@ -68,19 +74,31 @@ public class ChainCmd extends BaseChainCmd {
         }
     }
 
-    @CmdAnnotation(cmd = "cm_chainReg", version = 1.0, description = "chainReg")
-    @Parameter(parameterName = "chainId", parameterType = "int", parameterValidRange = "[1,65535]")
-    @Parameter(parameterName = "chainName", parameterType = "String")
-    @Parameter(parameterName = "addressType", parameterType = "String")
-    @Parameter(parameterName = "magicNumber", parameterType = "long", parameterValidRange = "[1,4294967295]")
-    @Parameter(parameterName = "minAvailableNodeNum", parameterType = "int", parameterValidRange = "[1,65535]")
-    @Parameter(parameterName = "address", parameterType = "String")
-    @Parameter(parameterName = "assetId", parameterType = "int", parameterValidRange = "[1,65535]")
-    @Parameter(parameterName = "symbol", parameterType = "array")
-    @Parameter(parameterName = "assetName", parameterType = "String")
-    @Parameter(parameterName = "initNumber", parameterType = "String")
-    @Parameter(parameterName = "decimalPlaces", parameterType = "short", parameterValidRange = "[1,128]")
-    @Parameter(parameterName = "password", parameterType = "String")
+
+    @CmdAnnotation(cmd = RpcConstants.CMD_CHAIN_REG, version = 1.0,
+            description = "链注册-用于平行链的跨链注册")
+    @Parameters(value = {
+            @Parameter(parameterName = "chainId", requestType = @TypeDescriptor(value = int.class), parameterValidRange = "[1-65535]", parameterDes = "资产链Id,取值区间[1-65535]"),
+            @Parameter(parameterName = "chainName", requestType = @TypeDescriptor(value = String.class), parameterDes = "链名称"),
+            @Parameter(parameterName = "addressType", requestType = @TypeDescriptor(value = int.class), parameterDes = "1 使用NULS框架构建的链 生态内，2生态外"),
+            @Parameter(parameterName = "magicNumber", requestType = @TypeDescriptor(value = long.class), parameterDes = "网络魔法参数"),
+            @Parameter(parameterName = "minAvailableNodeNum", requestType = @TypeDescriptor(value = int.class), parameterDes = "最小连接数"),
+            @Parameter(parameterName = "assetId", requestType = @TypeDescriptor(value = int.class), parameterValidRange = "[1-65535]", parameterDes = "资产Id,取值区间[1-65535]"),
+            @Parameter(parameterName = "symbol", requestType = @TypeDescriptor(value = String.class), parameterDes = "资产符号"),
+            @Parameter(parameterName = "assetName", requestType = @TypeDescriptor(value = String.class), parameterDes = "资产名称"),
+            @Parameter(parameterName = "initNumber", requestType = @TypeDescriptor(value = String.class), parameterDes = "资产初始值"),
+            @Parameter(parameterName = "decimalPlaces", requestType = @TypeDescriptor(value = short.class), parameterDes = "资产小数点位数"),
+            @Parameter(parameterName = "address", requestType = @TypeDescriptor(value = String.class), parameterDes = "创建交易的账户地址"),
+            @Parameter(parameterName = "password", requestType = @TypeDescriptor(value = String.class), parameterDes = "账户密码"),
+            @Parameter(parameterName = "verifierList", requestType = @TypeDescriptor(value = List.class, collectionElement = String.class), parameterDes = "验证者名单列表"),
+            @Parameter(parameterName = "signatureBFTRatio", requestType = @TypeDescriptor(value = Integer.class), parameterDes = "拜占庭比例,大于等于该值为有效确认"),
+            @Parameter(parameterName = "maxSignatureCount", requestType = @TypeDescriptor(value = Integer.class), parameterDes = "最大签名数量,限制验证者签名列表的最大数")
+    })
+    @ResponseData(name = "返回值", description = "返回一个Map对象",
+            responseType = @TypeDescriptor(value = Map.class, mapKeys = {
+                    @Key(name = "txHash", valueType = String.class, description = "交易hash值")
+            })
+    )
     public Response chainReg(Map params) {
         /* 发送到交易模块 (Send to transaction module) */
         Map<String, String> rtMap = new HashMap<>(1);
@@ -144,30 +162,21 @@ public class ChainCmd extends BaseChainCmd {
         return success(rtMap);
     }
 
-    @CmdAnnotation(cmd = "getCrossChainInfos", version = 1.0, description = "getCrossChainInfos")
+    @CmdAnnotation(cmd = RpcConstants.CMD_GET_CROSS_CHAIN_INFOS, version = 1.0,
+            description = "获取跨链注册资产信息")
+
+    @ResponseData(name = "返回值", description = "返回一个Map对象",
+            responseType = @TypeDescriptor(value = Map.class, collectionElement = List.class, mapKeys = {
+                    @Key(name = "chainInfos", valueType = List.class, valueElement = ChainDto.class, description = "资产信息列表")
+            })
+    )
     public Response getCrossChainInfos(Map params) {
         List<Map<String, Object>> chainInfos = new ArrayList<>();
         Map<String, Object> rtMap = new HashMap<>();
         try {
             List<BlockChain> blockChains = chainService.getBlockList();
             for (BlockChain blockChain : blockChains) {
-                Map<String, Object> chainInfoMap = new HashMap<>();
-                chainInfoMap.put("chainId", blockChain.getChainId());
-                chainInfoMap.put("chainName", blockChain.getChainName());
-                chainInfoMap.put("minAvailableNodeNum",blockChain.getMinAvailableNodeNum());
-                List<Asset> assets = assetService.getAssets(blockChain.getSelfAssetKeyList());
-                List<Map<String, Object>> rtAssetList = new ArrayList<>();
-                for (Asset asset : assets) {
-                    Map<String, Object> assetMap = new HashMap<>();
-                    assetMap.put("assetId", asset.getAssetId());
-                    assetMap.put("symbol", asset.getSymbol());
-                    assetMap.put("assetName", asset.getAssetName());
-                    assetMap.put("usable", asset.isAvailable());
-                    assetMap.put("decimalPlaces", asset.getDecimalPlaces());
-                    rtAssetList.add(assetMap);
-                }
-                chainInfoMap.put("assetInfoList", rtAssetList);
-                chainInfos.add(chainInfoMap);
+                chainInfos.add(chainService.getBlockAssetsInfo(blockChain));
             }
         } catch (Exception e) {
             LoggerUtil.logger().error(e);
@@ -175,4 +184,5 @@ public class ChainCmd extends BaseChainCmd {
         rtMap.put("chainInfos", chainInfos);
         return success(rtMap);
     }
+
 }

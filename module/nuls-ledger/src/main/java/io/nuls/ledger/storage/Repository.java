@@ -25,10 +25,10 @@
  */
 package io.nuls.ledger.storage;
 
+import io.nuls.core.exception.NulsException;
 import io.nuls.ledger.model.ChainHeight;
 import io.nuls.ledger.model.po.AccountState;
 import io.nuls.ledger.model.po.BlockSnapshotAccounts;
-import io.nuls.core.exception.NulsException;
 
 import java.util.List;
 import java.util.Map;
@@ -42,14 +42,6 @@ public interface Repository {
 
 
     /**
-     * put accountState to rocksdb
-     *
-     * @param key
-     * @param accountState
-     */
-    void createAccountState(byte[] key, AccountState accountState);
-
-    /**
      * 获取账号账本信息
      * Getting Account Book Information
      *
@@ -60,14 +52,13 @@ public interface Repository {
     AccountState getAccountState(int chainId, byte[] key);
 
     /**
-     * 更新账号账本信息
-     * update Account ledger Information
+     * 内存获取账户余额对象
      *
+     * @param chainId
      * @param key
-     * @param nowAccountState
-     * @throws Exception
+     * @return
      */
-    void updateAccountState(byte[] key, AccountState nowAccountState) throws Exception;
+    AccountState getAccountStateByMemory(int chainId, String key);
 
     /**
      * 批量更新账号账本信息
@@ -77,7 +68,7 @@ public interface Repository {
      * @param accountStateMap
      * @throws Exception
      */
-    void batchUpdateAccountState(int addressChainId, Map<byte[], byte[]> accountStateMap) throws Exception;
+    void batchUpdateAccountState(int addressChainId, Map<byte[], byte[]> accountStateMap,Map<String, AccountState> accountStateMemMap) throws Exception;
 
     /**
      * 删除区块快照

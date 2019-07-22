@@ -1,17 +1,22 @@
 package io.nuls.account.tx.v1;
 
+import io.nuls.account.constant.AccountConstant;
 import io.nuls.account.constant.AccountErrorCode;
 import io.nuls.account.model.bo.Chain;
 import io.nuls.account.service.TransactionService;
+import io.nuls.account.util.LoggerUtil;
 import io.nuls.account.util.manager.ChainManager;
 import io.nuls.base.data.BlockHeader;
 import io.nuls.base.data.Transaction;
 import io.nuls.base.protocol.TransactionProcessor;
+import io.nuls.core.basic.Result;
 import io.nuls.core.constant.TxType;
 import io.nuls.core.core.annotation.Autowired;
 import io.nuls.core.core.annotation.Component;
+import io.nuls.core.exception.NulsException;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -27,22 +32,40 @@ public class TransferProcessor implements TransactionProcessor {
     }
 
     @Override
-    public List<Transaction> validate(int chainId, List<Transaction> txs, Map<Integer, List<Transaction>> txMap, BlockHeader blockHeader) {
-        Chain chain = chainManager.getChain(chainId);
-        if (chain == null) {
-            chain.getLogger().error(AccountErrorCode.CHAIN_NOT_EXIST.getCode());
-            return txs;
-        }
-        List<Transaction> result = new ArrayList<>();
-        for (Transaction tx : txs) {
-            try {
-                if (!transactionService.transferTxValidate(chain, tx)) {
-                    result.add(tx);
-                }
-            } catch (Exception e) {
-                chain.getLogger().error(e);
-                result.add(tx);
+    public Map<String, Object> validate(int chainId, List<Transaction> txs, Map<Integer, List<Transaction>> txMap, BlockHeader blockHeader) {
+        Map<String, Object> result = null;
+        Chain chain = null;
+        try {
+            chain = chainManager.getChain(chainId);
+            result = new HashMap<>(AccountConstant.INIT_CAPACITY_4);
+            String errorCode = null;
+            if (chain == null) {
+                errorCode = AccountErrorCode.CHAIN_NOT_EXIST.getCode();
+                chain.getLogger().error("chain is not exist, -chainId:{}", chainId);
+                result.put("txList", txs);
+                result.put("errorCode", errorCode);
+                return result;
             }
+            List<Transaction> txList = new ArrayList<>();
+            for (Transaction tx : txs) {
+                try {
+                    Result rs =  transactionService.transferTxValidate(chain, tx);
+                    if (rs.isFailed()) {
+                        errorCode = rs.getErrorCode().getCode();
+                        txList.add(tx);
+                    }
+                } catch (NulsException e) {
+                    chain.getLogger().error(e);
+                    errorCode = e.getErrorCode().getCode();
+                    txList.add(tx);
+                }
+            }
+            result.put("txList", txList);
+            result.put("errorCode", errorCode);
+        } catch (Exception e) {
+            errorLogProcess(chain, e);
+            result.put("txList", txs);
+            result.put("errorCode", AccountErrorCode.SYS_UNKOWN_EXCEPTION);
         }
         return result;
     }
@@ -57,4 +80,12 @@ public class TransferProcessor implements TransactionProcessor {
         return true;
     }
 
+
+    private void errorLogProcess(Chain chain, Exception e) {
+        if (chain == null) {
+            LoggerUtil.LOG.error(e);
+        } else {
+            chain.getLogger().error(e);
+        }
+    }
 }

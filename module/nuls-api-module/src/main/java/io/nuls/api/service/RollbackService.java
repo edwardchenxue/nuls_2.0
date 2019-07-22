@@ -1,6 +1,6 @@
 package io.nuls.api.service;
 
-import io.nuls.api.ApiContext;
+import io.nuls.api.analysis.AnalysisHandler;
 import io.nuls.api.analysis.WalletRpcHandler;
 import io.nuls.api.constant.ApiConstant;
 import io.nuls.api.constant.ApiErrorCode;
@@ -9,11 +9,11 @@ import io.nuls.api.manager.CacheManager;
 import io.nuls.api.model.po.db.*;
 import io.nuls.api.utils.DBUtil;
 import io.nuls.base.basic.AddressTool;
-import io.nuls.core.basic.Result;
 import io.nuls.core.constant.TxType;
 import io.nuls.core.core.annotation.Autowired;
 import io.nuls.core.core.annotation.Component;
 import io.nuls.core.exception.NulsRuntimeException;
+import io.nuls.core.log.Log;
 
 import java.math.BigInteger;
 import java.util.*;
@@ -74,11 +74,19 @@ public class RollbackService {
 
     public boolean rollbackBlock(int chainId, long blockHeight) {
         clear();
-        Result<BlockInfo> result = WalletRpcHandler.getBlockInfo(chainId, blockHeight);
-        if (result.isFailed()) {
+        BlockHexInfo blockHexInfo = blockService.getBlockHexInfo(chainId, blockHeight);
+        if (blockHexInfo == null) {
+            blockService.deleteBlockHeader(chainId, blockHeight);
+            return true;
+        }
+
+        BlockInfo blockInfo;
+        try {
+            blockInfo = AnalysisHandler.toBlockInfo(blockHexInfo.getBlockHex(), chainId);
+        } catch (Exception e) {
+            Log.error(e);
             return false;
         }
-        BlockInfo blockInfo = result.getData();
 
         findAddProcessAgentOfBlock(chainId, blockInfo);
 
@@ -113,21 +121,22 @@ public class RollbackService {
             headerInfo.setByAgentInfo(agentInfo);
 
             if (blockInfo.getTxList() != null && !blockInfo.getTxList().isEmpty()) {
-                calcCommissionReward(agentInfo, blockInfo.getTxList().get(0));
+                calcCommissionReward(chainId, agentInfo, blockInfo.getTxList().get(0));
             }
         }
     }
 
-    private void calcCommissionReward(AgentInfo agentInfo, TransactionInfo coinBaseTx) {
+    private void calcCommissionReward(int chainId, AgentInfo agentInfo, TransactionInfo coinBaseTx) {
         List<CoinToInfo> list = coinBaseTx.getCoinTos();
         if (null == list || list.isEmpty()) {
             return;
         }
 
+        AssetInfo assetInfo = CacheManager.getCacheChain(chainId).getDefaultAsset();
         BigInteger agentReward = BigInteger.ZERO, otherReward = BigInteger.ZERO;
         for (CoinToInfo output : list) {
             //奖励只计算本链的共识资产
-            if (output.getChainId() == ApiContext.defaultChainId && output.getAssetsId() == ApiContext.awardAssetId) {
+            if (output.getChainId() == assetInfo.getChainId() && output.getAssetsId() == assetInfo.getAssetId()) {
                 if (output.getAddress().equals(agentInfo.getRewardAddress())) {
                     agentReward = agentReward.add(output.getAmount());
                 } else {
@@ -185,6 +194,8 @@ public class RollbackService {
         if (tx.getCoinTos() == null || tx.getCoinTos().isEmpty()) {
             return;
         }
+
+        AssetInfo assetInfo = CacheManager.getCacheChain(chainId).getDefaultAsset();
         Set<String> addressSet = new HashSet<>();
         for (CoinToInfo output : tx.getCoinTos()) {
             addressSet.add(output.getAddress());
@@ -192,7 +203,7 @@ public class RollbackService {
             txRelationInfoSet.add(new TxRelationInfo(output.getAddress(), tx.getHash()));
 
             //奖励是本链主资产的时候，回滚奖励金额
-            if (output.getChainId() == ApiContext.defaultChainId && output.getAssetsId() == ApiContext.awardAssetId) {
+            if (output.getChainId() == assetInfo.getChainId() && output.getAssetsId() == assetInfo.getAssetId()) {
                 AccountInfo accountInfo = queryAccountInfo(chainId, output.getAddress());
                 accountInfo.setTotalReward(accountInfo.getTotalReward().subtract(output.getAmount()));
             }
@@ -296,8 +307,9 @@ public class RollbackService {
         txRelationInfoSet.add(new TxRelationInfo(output.getAddress(), tx.getHash()));
 
         //查找到代理节点，设置isNew = true，最后做存储的时候删除
-        AgentInfo agentInfo = (AgentInfo) tx.getTxData();
+        AgentInfo agentInfo = queryAgentInfo(chainId, tx.getHash(), 1);
         agentInfo.setNew(true);
+        accountInfo.setConsensusLock(accountInfo.getConsensusLock().subtract(agentInfo.getDeposit()));
     }
 
     private void processDepositTx(int chainId, TransactionInfo tx) {
@@ -312,6 +324,8 @@ public class RollbackService {
         DepositInfo depositInfo = (DepositInfo) tx.getTxData();
         depositInfo.setNew(true);
         depositInfoList.add(depositInfo);
+        accountInfo.setConsensusLock(accountInfo.getConsensusLock().subtract(depositInfo.getAmount()));
+
         AgentInfo agentInfo = queryAgentInfo(chainId, depositInfo.getAgentHash(), 1);
         agentInfo.setTotalDeposit(agentInfo.getTotalDeposit().subtract(depositInfo.getAmount()));
         agentInfo.setNew(false);
@@ -331,6 +345,8 @@ public class RollbackService {
         //查询取消委托记录，再根据deleteHash反向查到委托记录
         DepositInfo cancelInfo = (DepositInfo) tx.getTxData();
         DepositInfo depositInfo = depositService.getDepositInfoByKey(chainId, cancelInfo.getDeleteKey());
+        accountInfo.setConsensusLock(accountInfo.getConsensusLock().add(depositInfo.getAmount()));
+
         depositInfo.setDeleteKey(null);
         depositInfo.setDeleteHeight(0);
         cancelInfo.setNew(true);
@@ -355,6 +371,7 @@ public class RollbackService {
             if (accountInfo.getAddress().equals(agentInfo.getAgentAddress())) {
                 if (output.getLockTime() > 0) {
                     accountInfo.setTxCount(accountInfo.getTxCount() - 1);
+                    accountInfo.setConsensusLock(accountInfo.getConsensusLock().add(agentInfo.getDeposit()));
                     calcBalance(chainId, output.getChainId(), output.getAssetsId(), accountInfo, tx.getFee().getValue());
                 }
             } else {
@@ -377,6 +394,8 @@ public class RollbackService {
                 depositInfoList.add(cancelDeposit);
                 depositInfoList.add(depositInfo);
 
+                AccountInfo accountInfo = queryAccountInfo(chainId, depositInfo.getAddress());
+                accountInfo.setConsensusLock(accountInfo.getConsensusLock().add(depositInfo.getAmount()));
                 agentInfo.setTotalDeposit(agentInfo.getTotalDeposit().add(depositInfo.getAmount()));
             }
         }
@@ -413,6 +432,7 @@ public class RollbackService {
             if (accountInfo.getAddress().equals(agentInfo.getAgentAddress())) {
                 if (output.getLockTime() > 0) {
                     accountInfo.setTxCount(accountInfo.getTxCount() - 1);
+                    accountInfo.setConsensusLock(accountInfo.getConsensusLock().add(agentInfo.getDeposit()));
                 }
             } else {
                 accountInfo.setTxCount(accountInfo.getTxCount() - 1);
@@ -433,6 +453,8 @@ public class RollbackService {
                 depositInfoList.add(cancelDeposit);
                 depositInfoList.add(depositInfo);
 
+                AccountInfo accountInfo = queryAccountInfo(chainId, depositInfo.getAddress());
+                accountInfo.setConsensusLock(accountInfo.getConsensusLock().subtract(depositInfo.getAmount()));
                 agentInfo.setTotalDeposit(agentInfo.getTotalDeposit().add(depositInfo.getAmount()));
             }
         }
@@ -463,7 +485,7 @@ public class RollbackService {
         ContractInfo contractInfo = queryContractInfo(chainId, resultInfo.getContractAddress());
         contractInfo.setTxCount(contractInfo.getTxCount() - 1);
 
-        if (resultInfo.isSuccess() && contractInfo.isNrc20()) {
+        if (resultInfo.isSuccess()) {
             processTokenTransfers(chainId, resultInfo.getTokenTransfers(), tx);
         }
     }
@@ -500,7 +522,7 @@ public class RollbackService {
                 break;
             }
         }
-        calcBalance(chainId, output.getChainId(), output.getAssetsId(), accountInfo, tx.getFee().getValue().add(output.getAmount()));
+        calcBalance(chainId, input.getChainId(), input.getAssetsId(), accountInfo, output.getAmount().add(tx.getFee().getValue()));
 
         AccountInfo destroyAccount = queryAccountInfo(chainId, output.getAddress());
         accountInfo.setTxCount(destroyAccount.getTxCount() - 1);
@@ -517,7 +539,7 @@ public class RollbackService {
         calcBalance(chainId, output.getChainId(), output.getAssetsId(), accountInfo, tx.getFee().getValue());
         txRelationInfoSet.add(new TxRelationInfo(output.getAddress(), tx.getHash()));
 
-        ChainInfo chainInfo = CacheManager.getChainInfo(chainId);
+        ChainInfo chainInfo = chainService.getChainInfo(chainId);
         chainInfo.setStatus(ENABLE);
         for (AssetInfo assetInfo : chainInfo.getAssets()) {
             assetInfo.setStatus(ENABLE);
@@ -540,14 +562,14 @@ public class RollbackService {
                 break;
             }
         }
-        calcBalance(chainId, output.getChainId(), output.getAssetsId(), accountInfo, tx.getFee().getValue().add(output.getAmount()));
+        calcBalance(chainId, input.getChainId(), input.getAssetsId(), accountInfo, output.getAmount().add(tx.getFee().getValue()));
         AccountInfo destroyAccount = queryAccountInfo(chainId, output.getAddress());
         accountInfo.setTxCount(destroyAccount.getTxCount() - 1);
         calcBalance(chainId, output);
         txRelationInfoSet.add(new TxRelationInfo(output.getAddress(), tx.getHash()));
 
         AssetInfo assetInfo = (AssetInfo) tx.getTxData();
-        ChainInfo chainInfo = CacheManager.getChainInfo(chainId);
+        ChainInfo chainInfo = chainService.getChainInfo(chainId);
         chainInfo.removeAsset(assetInfo.getAssetId());
         chainInfoList.add(chainInfo);
     }
@@ -555,12 +577,12 @@ public class RollbackService {
     private void processCancelAssetTx(int chainId, TransactionInfo tx) {
         CoinToInfo output = tx.getCoinTos().get(0);
         AccountInfo accountInfo = queryAccountInfo(chainId, output.getAddress());
-        accountInfo.setTxCount(accountInfo.getTxCount() + 1);
+        accountInfo.setTxCount(accountInfo.getTxCount() - 1);
         calcBalance(chainId, output.getChainId(), output.getAssetsId(), accountInfo, tx.getFee().getValue());
         txRelationInfoSet.add(new TxRelationInfo(output.getAddress(), tx.getHash()));
 
         AssetInfo assetInfo = (AssetInfo) tx.getTxData();
-        ChainInfo chainInfo = CacheManager.getChainInfo(chainId);
+        ChainInfo chainInfo = chainService.getChainInfo(chainId);
         chainInfo.getAsset(assetInfo.getAssetId()).setStatus(ENABLE);
         chainInfo.setNew(false);
         chainInfoList.add(chainInfo);
@@ -606,7 +628,7 @@ public class RollbackService {
 
 
     private AccountLedgerInfo calcBalance(int chainId, CoinToInfo output) {
-        ChainInfo chainInfo = CacheManager.getChainInfo(chainId);
+        ChainInfo chainInfo = CacheManager.getCacheChain(chainId);
         if (output.getChainId() == chainInfo.getChainId() && output.getAssetsId() == chainInfo.getDefaultAsset().getAssetId()) {
             AccountInfo accountInfo = queryAccountInfo(chainId, output.getAddress());
             accountInfo.setTotalIn(accountInfo.getTotalIn().subtract(output.getAmount()));
@@ -625,7 +647,7 @@ public class RollbackService {
     }
 
     private AccountLedgerInfo calcBalance(int chainId, CoinFromInfo input) {
-        ChainInfo chainInfo = CacheManager.getChainInfo(chainId);
+        ChainInfo chainInfo = CacheManager.getCacheChain(chainId);
         if (input.getChainId() == chainInfo.getChainId() && input.getAssetsId() == chainInfo.getDefaultAsset().getAssetId()) {
             AccountInfo accountInfo = queryAccountInfo(chainId, input.getAddress());
             accountInfo.setTotalOut(accountInfo.getTotalOut().subtract(input.getAmount()));

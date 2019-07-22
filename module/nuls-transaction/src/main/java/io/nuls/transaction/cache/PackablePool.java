@@ -4,10 +4,8 @@ import io.nuls.base.data.Transaction;
 import io.nuls.core.core.annotation.Autowired;
 import io.nuls.core.core.annotation.Component;
 import io.nuls.core.model.ByteArrayWrapper;
-import io.nuls.transaction.constant.TxConstant;
 import io.nuls.transaction.model.bo.Chain;
 import io.nuls.transaction.storage.UnconfirmedTxStorageService;
-import io.nuls.transaction.task.StatisticsTask;
 
 import java.util.List;
 import java.util.Map;
@@ -51,11 +49,6 @@ public class PackablePool {
      * @return
      */
     public boolean add(Chain chain, Transaction tx) {
-        int packableTxMapSize = chain.getPackableTxMap().size();
-        if(packableTxMapSize >= TxConstant.PACKABLE_TX_MAX_SIZE){
-            chain.getLogger().warn("PackableTxMapSize max pool size was reached, discard tx");
-            return false;
-        }
         ByteArrayWrapper hash = new ByteArrayWrapper(tx.getHash().getBytes());
         synchronized (hash) {
             if (chain.getPackableHashQueue().offer(hash)) {
@@ -79,7 +72,6 @@ public class PackablePool {
         while (true) {
             ByteArrayWrapper hash = chain.getPackableHashQueue().poll();
             if (null == hash) {
-
                 return null;
             }
             synchronized (hash) {
@@ -124,16 +116,18 @@ public class PackablePool {
             ByteArrayWrapper wrapper = new ByteArrayWrapper(hash);
             map.remove(wrapper);
         }
-        // TODO: 2019/6/21  test统计
-        chain.getLogger().debug("PackableHashQueue size:{}", chain.getPackableHashQueue().size());
-        chain.getLogger().debug("PackableTxMap size:{}", chain.getPackableTxMap().size());
-        StatisticsTask.packingHash = chain.getPackableHashQueue().size();
-        StatisticsTask.packingMapTx = chain.getPackableTxMap().size();
     }
 
+    /**
+     * 判断交易是否在待打包队列的map中
+     * 交易如果存在于待打包hash队列中,不一定存在于map中.
+     * @param chain
+     * @param tx
+     * @return
+     */
     public boolean exist(Chain chain, Transaction tx) {
         ByteArrayWrapper hash = new ByteArrayWrapper(tx.getHash().getBytes());
-        return chain.getPackableHashQueue().contains(hash);
+        return chain.getPackableTxMap().containsKey(hash);
     }
 
     public int packableHashQueueSize(Chain chain) {

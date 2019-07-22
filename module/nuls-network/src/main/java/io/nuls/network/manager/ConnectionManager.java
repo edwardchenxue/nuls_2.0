@@ -61,6 +61,8 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class ConnectionManager extends BaseManager {
     NetworkConfig networkConfig = SpringLiteContext.getBean(NetworkConfig.class);
+    NettyServer server = null;
+    NettyServer serverCross = null;
     private static ConnectionManager instance = new ConnectionManager();
     /**
      * 作为Server 被动连接的peer
@@ -152,17 +154,21 @@ public class ConnectionManager extends BaseManager {
             attributeKey = AttributeKey.newInstance(name);
         }
         Attribute<Node> attribute = channel.attr(attributeKey);
+
         attribute.set(node);
     }
 
     public boolean nodeConnectIn(String ip, int port, SocketChannel channel) {
-
         boolean isCross = false;
         //client 连接 server的端口是跨链端口?
         if (channel.localAddress().getPort() == networkConfig.getCrossPort()) {
             isCross = true;
         }
-        Log.debug("peer = {}:{} connectIn isCross={}", ip, port, isCross);
+        if (!isRunning()) {
+            LoggerUtil.COMMON_LOG.debug("ConnectionManager is stop,refuse peer = {}:{} connectIn isCross={}", ip, port, isCross);
+            return false;
+        }
+        LoggerUtil.COMMON_LOG.debug("peer = {}:{} connectIn isCross={}", ip, port, isCross);
         //此时无法判定业务所属的网络id，所以无法归属哪个group,只有在version消息处理时才能知道
         Node node = new Node(0L, ip, port, 0, Node.IN, isCross);
         node.setConnectStatus(NodeConnectStatusEnum.CONNECTED);
@@ -216,8 +222,8 @@ public class ConnectionManager extends BaseManager {
      * server start
      */
     private void serverStart() {
-        NettyServer server = new NettyServer(networkConfig.getPort());
-        NettyServer serverCross = new NettyServer(networkConfig.getCrossPort());
+        server = new NettyServer(networkConfig.getPort());
+        serverCross = new NettyServer(networkConfig.getCrossPort());
         server.init();
         serverCross.init();
         ThreadUtils.createAndRunThread("node server start", () -> {
@@ -272,5 +278,17 @@ public class ConnectionManager extends BaseManager {
         }
         nettyBoot();
         status = ManagerStatusEnum.RUNNING;
+    }
+
+    @Override
+    public void change(ManagerStatusEnum toStatus) throws Exception {
+        status = toStatus;
+        if (toStatus == ManagerStatusEnum.STOPED) {
+            //暂时不关闭netty
+
+        } else if (toStatus == ManagerStatusEnum.RUNNING) {
+            //不处理
+        }
+
     }
 }

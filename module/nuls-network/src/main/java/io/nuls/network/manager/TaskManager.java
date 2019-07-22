@@ -24,11 +24,10 @@
  */
 package io.nuls.network.manager;
 
-import io.nuls.core.core.ioc.SpringLiteContext;
 import io.nuls.core.log.Log;
 import io.nuls.core.thread.ThreadUtils;
 import io.nuls.core.thread.commom.NulsThreadFactory;
-import io.nuls.network.cfg.NetworkConfig;
+import io.nuls.network.constant.ManagerStatusEnum;
 import io.nuls.network.model.NodeGroup;
 import io.nuls.network.task.*;
 
@@ -71,11 +70,13 @@ public class TaskManager extends BaseManager {
         scheduleGroupStatusMonitor();
         timeServiceThreadStart();
         nwInfosThread();
-        NetworkConfig networkConfig = SpringLiteContext.getBean(NetworkConfig.class);
-        if (1 == networkConfig.getUpdatePeerInfoType()) {
-            localInfosSendTask();
-        }
+        peerCacheMsgSendTask();
         heartBeatThread();
+    }
+
+    @Override
+    public void change(ManagerStatusEnum toStatus) throws Exception {
+
     }
 
     private void connectTasks() {
@@ -84,14 +85,10 @@ public class TaskManager extends BaseManager {
         executorService.scheduleWithFixedDelay(new NodeDiscoverTask(), 3, 10, TimeUnit.SECONDS);
     }
 
-    private void localInfosSendTask() {
-        //进行本地信息广播线程
-        executorService.scheduleWithFixedDelay(new LocalInfosSendTask(), 5, 5, TimeUnit.SECONDS);
-    }
-
     private void nwInfosThread() {
         executorService.scheduleWithFixedDelay(new NwInfosPrintTask(), 5, 60, TimeUnit.SECONDS);
     }
+
 
     private void heartBeatThread() {
         executorService.scheduleWithFixedDelay(new HeartBeatTask(), 5, 25, TimeUnit.SECONDS);
@@ -109,6 +106,11 @@ public class TaskManager extends BaseManager {
         Log.debug("----------- TimeService start -------------");
         TimeManager.getInstance().initWebTimeServer();
         ThreadUtils.createAndRunThread("TimeTask", new TimeTask(), true);
+    }
+
+    private void peerCacheMsgSendTask() {
+        Log.debug("----------- peerCacheMsgSendTask start -------------");
+        ThreadUtils.createAndRunThread("peerCacheMsgSendTask", new PeerCacheMsgSendTask(), true);
     }
 
     public void createShareAddressTask(NodeGroup nodeGroup, boolean isCross) {

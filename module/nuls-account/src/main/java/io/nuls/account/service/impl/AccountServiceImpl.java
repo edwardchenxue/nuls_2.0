@@ -31,7 +31,7 @@ import io.nuls.account.constant.AccountErrorCode;
 import io.nuls.account.model.bo.Account;
 import io.nuls.account.model.bo.AccountKeyStore;
 import io.nuls.account.model.bo.Chain;
-import io.nuls.account.model.po.AccountPo;
+import io.nuls.account.model.po.AccountPO;
 import io.nuls.account.rpc.call.ContractCall;
 import io.nuls.account.rpc.call.EventCall;
 import io.nuls.account.service.AccountCacheService;
@@ -49,7 +49,7 @@ import io.nuls.base.signture.P2PHKSignature;
 import io.nuls.base.signture.SignatureUtil;
 import io.nuls.core.basic.InitializingBean;
 import io.nuls.core.core.annotation.Autowired;
-import io.nuls.core.core.annotation.Service;
+import io.nuls.core.core.annotation.Component;
 import io.nuls.core.crypto.AESEncrypt;
 import io.nuls.core.crypto.ECKey;
 import io.nuls.core.crypto.HexUtil;
@@ -68,7 +68,7 @@ import java.util.concurrent.locks.ReentrantLock;
 /**
  * @author: qinyifeng
  */
-@Service
+@Component
 public class AccountServiceImpl implements AccountService, InitializingBean {
 
     private Lock locker = new ReentrantLock();
@@ -102,7 +102,7 @@ public class AccountServiceImpl implements AccountService, InitializingBean {
         locker.lock();
         try {
             List<Account> accounts = new ArrayList<>();
-            List<AccountPo> accountPos = new ArrayList<>();
+            List<AccountPO> accountPOs = new ArrayList<>();
             for (int i = 0; i < count; i++) {
                 //create account
                 Account account = AccountTool.createAccount(chainId);
@@ -110,11 +110,11 @@ public class AccountServiceImpl implements AccountService, InitializingBean {
                     account.encrypt(password);
                 }
                 accounts.add(account);
-                AccountPo po = new AccountPo(account);
-                accountPos.add(po);
+                AccountPO po = new AccountPO(account);
+                accountPOs.add(po);
             }
             //Saving account data in batches
-            boolean result = accountStorageService.saveAccountList(accountPos);
+            boolean result = accountStorageService.saveAccountList(accountPOs);
             if (result) {
                 //If saved successfully, put the account in local cache.
                 for (Account account : accounts) {
@@ -164,11 +164,11 @@ public class AccountServiceImpl implements AccountService, InitializingBean {
             }
         } else {
             //Query all accounts list
-            List<AccountPo> poList = accountStorageService.getAccountList();
+            List<AccountPO> poList = accountStorageService.getAccountList();
             if (null == poList || poList.isEmpty()) {
                 return list;
             }
-            for (AccountPo po : poList) {
+            for (AccountPO po : poList) {
                 Account account = po.toAccount();
                 list.add(account);
             }
@@ -254,7 +254,7 @@ public class AccountServiceImpl implements AccountService, InitializingBean {
             LoggerUtil.LOG.error("encrypt the account occur exception,chainId:{},address:{}", chainId, address, e);
         }
         //save the account
-        AccountPo po = new AccountPo(account);
+        AccountPO po = new AccountPO(account);
         boolean result = accountStorageService.saveAccount(po);
         if (!result) {
             LoggerUtil.LOG.debug("save the account failed,chainId:{},address:{}", chainId, address);
@@ -294,7 +294,7 @@ public class AccountServiceImpl implements AccountService, InitializingBean {
             account.unlock(oldPassword);
             //Encrypting the account by the new password
             account.encrypt(newPassword, true);
-            AccountPo po = new AccountPo(account);
+            AccountPO po = new AccountPO(account);
             //save the account to the database
             boolean result = accountStorageService.updateAccount(po);
             //save the account to the cache
@@ -458,7 +458,7 @@ public class AccountServiceImpl implements AccountService, InitializingBean {
         }
         //save the account to the database
         account.setRemark(remark);
-        boolean result = accountStorageService.updateAccount(new AccountPo(account));
+        boolean result = accountStorageService.updateAccount(new AccountPO(account));
         //save the account to the cache
         accountCacheService.getLocalAccountMaps().put(account.getAddress().getBase58(), account);
         return result;
@@ -483,6 +483,22 @@ public class AccountServiceImpl implements AccountService, InitializingBean {
             return null;
             //do not return unencrypted private key
             //throw new NulsRuntimeException(AccountErrorCode.ACCOUNT_UNENCRYPTED);
+        }
+    }
+
+    @Override
+    public String getPublicKey(int chainId, String address, String password) {
+        //check whether the account exists
+        Account account = this.getAccountByAddress(chainId, address);
+        if (null == account) {
+            throw new NulsRuntimeException(AccountErrorCode.ACCOUNT_NOT_EXIST);
+        }
+        //加过密(有密码) 就验证密码 Already encrypted(Added password), verify password
+        if (account.isEncrypted()) {
+            byte[] pubKeyBytes = account.getPubKey();
+            return HexUtil.encode(pubKeyBytes);
+        } else {
+            return null;
         }
     }
 
@@ -570,7 +586,7 @@ public class AccountServiceImpl implements AccountService, InitializingBean {
             account.setAlias(acc.getAlias());
         }
         //save account to storage
-        accountStorageService.saveAccount(new AccountPo(account));
+        accountStorageService.saveAccount(new AccountPO(account));
         //put the account in local cache
         accountCacheService.getLocalAccountMaps().put(account.getAddress().getBase58(), account);
         //backup account to keystore
@@ -647,7 +663,7 @@ public class AccountServiceImpl implements AccountService, InitializingBean {
         //encrypting account private key
         account.encrypt(password);
         //save account to storage
-        accountStorageService.saveAccount(new AccountPo(account));
+        accountStorageService.saveAccount(new AccountPO(account));
         //put the account in local cache
         accountCacheService.getLocalAccountMaps().put(account.getAddress().getBase58(), account);
         //backup account to keystore
