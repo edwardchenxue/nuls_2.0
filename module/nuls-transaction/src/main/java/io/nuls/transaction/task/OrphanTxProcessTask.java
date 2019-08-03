@@ -39,7 +39,8 @@ import io.nuls.transaction.rpc.call.LedgerCall;
 import io.nuls.transaction.rpc.call.NetworkCall;
 import io.nuls.transaction.service.TxService;
 import io.nuls.transaction.storage.UnconfirmedTxStorageService;
-import io.nuls.transaction.utils.TransactionComparator;
+import io.nuls.transaction.utils.OrphanSort;
+import io.nuls.transaction.utils.TxDuplicateRemoval;
 import io.nuls.transaction.utils.TxUtil;
 
 import java.util.Iterator;
@@ -61,7 +62,7 @@ public class OrphanTxProcessTask implements Runnable {
     private TxService txService = SpringLiteContext.getBean(TxService.class);
     private UnconfirmedTxStorageService unconfirmedTxStorageService = SpringLiteContext.getBean(UnconfirmedTxStorageService.class);
 
-    private TransactionComparator txComparator = SpringLiteContext.getBean(TransactionComparator.class);
+    private OrphanSort orphanSort = SpringLiteContext.getBean(OrphanSort.class);
 
     public OrphanTxProcessTask(Chain chain) {
         this.chain = chain;
@@ -71,10 +72,6 @@ public class OrphanTxProcessTask implements Runnable {
     public void run() {
         try {
             doOrphanTxTask(chain);
-//            boolean run = true;
-//            while (run){
-//                run = orphanTxTask(chain);
-//            }
         } catch (Exception e) {
             chain.getLogger().error("OrphanTxProcessTask Exception");
             chain.getLogger().error(e);
@@ -100,13 +97,12 @@ public class OrphanTxProcessTask implements Runnable {
             chainOrphan.clear();
         }
         try {
-            //时间排序TransactionTimeComparator
-            orphanTxList.sort(txComparator);
+            //孤儿排序
+            orphanSort.rank(orphanTxList);
             boolean flag = true;
             while (flag) {
                 flag = process(orphanTxList);
             }
-
         } catch (RuntimeException e) {
             chain.getLogger().error("[OrphanTxProcessTask] RuntimeException:{}", e.getMessage());
             throw new NulsException(TxErrorCode.SYS_UNKOWN_EXCEPTION);
@@ -118,8 +114,6 @@ public class OrphanTxProcessTask implements Runnable {
                     chain.getLogger().debug("[OrphanTxProcessTask] OrphanTxList size:{}", size);
                 }
             }
-            //todo 测试
-//            chain.getLogger().debug("[OrphanTxProcessTask] OrphanTxList size:{}", orphanTxList.size());
             chain.getLogger().debug("处理完成，当前孤儿交易总数chainOrphan:{}", chainOrphan.size());
         }
     }
@@ -164,7 +158,8 @@ public class OrphanTxProcessTask implements Runnable {
             int packableTxMapSize = chain.getPackableTxMap().size();
             if(TxUtil.discardTx(packableTxMapSize)){
                 //待打包队列map超过预定值, 不处理转发失败的情况
-                NetworkCall.broadcastTx(chain, tx, txNet.getExcludeNode());
+                String hash = tx.getHash().toHex();
+                NetworkCall.broadcastTx(chain, tx, TxDuplicateRemoval.getExcludeNode(hash));
                 return true;
             }
             VerifyLedgerResult verifyLedgerResult = LedgerCall.commitUnconfirmedTx(chain, RPCUtil.encode(tx.serialize()));
@@ -175,9 +170,10 @@ public class OrphanTxProcessTask implements Runnable {
                 //chain.getLogger().debug("[OrphanTxProcessTask] 加入待打包队列....hash:{}", tx.getHash().toHex());
                 }
                 //保存到rocksdb
-                unconfirmedTxStorageService.putTx(chainId, tx, txNet.getOriginalSendNanoTime());
+                unconfirmedTxStorageService.putTx(chainId, tx);
                 //转发交易hash,网络交易不处理转发失败的情况
-                NetworkCall.forwardTxHash(chain, tx.getHash(), txNet.getExcludeNode());
+                String hash = tx.getHash().toHex();
+                NetworkCall.forwardTxHash(chain, tx.getHash(), TxDuplicateRemoval.getExcludeNode(hash));
                 return true;
             }
            /* if(!verifyLedgerResult.isOrphan()) {

@@ -83,7 +83,8 @@ public class Node {
     }
 
     public void setCredit(int credit) {
-        this.credit = credit;
+        //主动设置的下载信用值不低于10
+        this.credit = Math.max(credit, 10);
     }
 
     public long getDuration() {
@@ -121,5 +122,24 @@ public class Node {
                 ", credit=" + credit +
                 ", duration=" + duration +
                 '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+
+        Node node = (Node) o;
+
+        return id != null ? id.equals(node.id) : node.id == null;
+    }
+
+    @Override
+    public int hashCode() {
+        return id != null ? id.hashCode() : 0;
     }
 }

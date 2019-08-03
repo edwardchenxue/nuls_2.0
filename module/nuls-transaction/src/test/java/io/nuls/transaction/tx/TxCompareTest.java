@@ -26,7 +26,6 @@ package io.nuls.transaction.tx;
 
 import io.nuls.base.data.NulsHash;
 import io.nuls.base.data.Transaction;
-import io.nuls.core.log.Log;
 import io.nuls.core.rpc.info.Constants;
 import io.nuls.core.rpc.info.HostInfo;
 import io.nuls.core.rpc.info.NoUse;
@@ -38,7 +37,6 @@ import io.nuls.transaction.model.bo.Chain;
 import io.nuls.transaction.model.bo.config.ConfigBean;
 import io.nuls.transaction.model.dto.CoinDTO;
 import io.nuls.transaction.model.po.TransactionNetPO;
-import io.nuls.transaction.utils.TransactionComparator;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -72,9 +70,6 @@ public class TxCompareTest {
 
     private Chain chain;
 
-
-    static TransactionComparator transactionComparator = new TransactionComparator();
-
     @Before
     public void before() throws Exception {
         NoUse.mockModule();
@@ -83,7 +78,7 @@ public class TxCompareTest {
         chain.setConfig(new ConfigBean(chainId, assetId, 1024 * 1024, 1000, 20, 20000, 60000));
     }
 
-    private List<Integer> randomIde(int count){
+    private List<Integer> randomIde(int count) {
         List<Integer> list = new ArrayList<>();
         Set<Integer> set = new HashSet<>();
         while (true) {
@@ -91,7 +86,7 @@ public class TxCompareTest {
             //随机数范取值围应为0到list最大索引之间
             //根据公式rand.nextInt((list.size() - 1) - 0 + 1) + 0;
             int ran = rand.nextInt(count);
-            if(set.add(ran)){
+            if (set.add(ran)) {
                 list.add(ran);
             }
             if (set.size() == count) {
@@ -107,13 +102,26 @@ public class TxCompareTest {
     //将交易的顺序打乱，再排序，来验证排序是否正确
     @Test
     public void test() throws Exception {
-        for(int y=0;y<10;y++) {
+        importPriKey("9ce21dad67e0f0af2599b41b515a7f7018059418bab892a7b68f283d489abc4b", password);//20 tNULSeBaMvEtDfvZuukDf2mVyfGo3DdiN8KLRG
+        importPriKey("477059f40708313626cccd26f276646e4466032cabceccbf571a7c46f954eb75", password);//21 tNULSeBaMnrs6JKrCy6TQdzYJZkMZJDng7QAsD
+        for (int y = 0; y < 1; y++) {
             System.out.println("------------------");
             System.out.println("------------------");
             System.out.println("------------------");
             System.out.println("------------------");
-            int count = 10;
-            List<Transaction> txs = createTxs(count);
+            int count = 2;
+            int times = 2;
+//            List<Transaction> txs = new ArrayList<>();
+//            for (int x = 0; x < times; x++) {
+//                Thread.sleep(1000L);
+//                txs.addAll(createTxs(count));
+//            }
+
+            List<Transaction> txs = new ArrayList<>();
+            List<Transaction> txs1 = createTxs(count);
+            txs.addAll(txs1);
+            txs.addAll(txs1);
+
             System.out.println("正确的顺序");
             for (Transaction tx : txs) {
                 System.out.println("正确的顺序: " + tx.getHash().toHex());
@@ -123,33 +131,35 @@ public class TxCompareTest {
             TxUtil.txInformationDebugPrint(tx);
         }*/
             List<TransactionNetPO> txList = new ArrayList<>();
-            List<Integer> ide = randomIde(count);
-            for (int i = 0; i < count; i++) {
-                System.out.println(ide.get(i));
+            int total = count * times;
+            List<Integer> ide = randomIde(total);
+            for (int i = 0; i < total; i++) {
                 txList.add(new TransactionNetPO(txs.get(ide.get(i))));
             }
-
-
-//        txList.add(new TransactionNetPO(txs.get(3)));
-//        txList.add(new TransactionNetPO(txs.get(8)));
-//        txList.add(new TransactionNetPO(txs.get(2)));
+            System.out.println("Size:" + txList.size());
+//
 //        txList.add(new TransactionNetPO(txs.get(4)));
-//        txList.add(new TransactionNetPO(txs.get(1)));
 //        txList.add(new TransactionNetPO(txs.get(7)));
-//        txList.add(new TransactionNetPO(txs.get(6)));
-//        txList.add(new TransactionNetPO(txs.get(9)));
+//        txList.add(new TransactionNetPO(txs.get(2)));
+//        txList.add(new TransactionNetPO(txs.get(3)));
 //        txList.add(new TransactionNetPO(txs.get(0)));
 //        txList.add(new TransactionNetPO(txs.get(5)));
+//        txList.add(new TransactionNetPO(txs.get(9)));
+//        txList.add(new TransactionNetPO(txs.get(1)));
+//        txList.add(new TransactionNetPO(txs.get(6)));
+//        txList.add(new TransactionNetPO(txs.get(8)));
 
 
             System.out.println("排序前");
             for (TransactionNetPO tx : txList) {
                 System.out.println("排序前的顺序: " + tx.getTx().getHash().toHex());
             }
-
+//            OrphanSort orphanSort = new OrphanSort();
+            long start = System.currentTimeMillis();
             //排序
             rank(txList);
-
+            long end = System.currentTimeMillis() - start;
+            System.out.println("执行时间：" + end);
             System.out.println(txList.size());
             System.out.println("排序后");
             for (TransactionNetPO tx : txList) {
@@ -170,7 +180,7 @@ public class TxCompareTest {
                 subList = new ArrayList<>();
                 groupMap.put(second, subList);
             }
-            tx.setOriginalSendNanoTime(second * 10000);
+            tx.setOrphanSortSerial(second * 10000);
             subList.add(tx);
         }
         //相同时间的组，进行细致排序，并更新排序字段的值
@@ -181,9 +191,9 @@ public class TxCompareTest {
         Collections.sort(txList, new Comparator<TransactionNetPO>() {
             @Override
             public int compare(TransactionNetPO o1, TransactionNetPO o2) {
-                if (o1.getOriginalSendNanoTime() > o2.getOriginalSendNanoTime()) {
+                if (o1.getOrphanSortSerial() > o2.getOrphanSortSerial()) {
                     return 1;
-                } else if (o1.getOriginalSendNanoTime() < o2.getOriginalSendNanoTime()) {
+                } else if (o1.getOrphanSortSerial() < o2.getOrphanSortSerial()) {
                     return -1;
                 }
                 return 0;
@@ -201,7 +211,7 @@ public class TxCompareTest {
         });
         int index = 0;
         for (TransactionNetPO po : result.getList()) {
-            po.setOriginalSendNanoTime(po.getOriginalSendNanoTime() + (index++));
+            po.setOrphanSortSerial(po.getOrphanSortSerial() + (index++));
         }
 
     }
@@ -222,6 +232,7 @@ public class TxCompareTest {
             int val = TxCompareTool.compareTo(thisItem.getObj(), item.getObj());
             if (val == 1 && !gotNext) {
                 item.setFlower(new TxCompareTool.SortItem[]{thisItem});
+                item.setHasFlower(true);
                 insertArray(i + 1, result, result.getIndex() + 1, thisItem, false);
                 gotFront = true;
                 gotIndex = i + 1;
@@ -234,10 +245,9 @@ public class TxCompareTest {
                     return;
                 }
                 boolean hasFlower = thisItem.isHasFlower();
-                TxCompareTool.SortItem<TransactionNetPO>[] flower = new TxCompareTool.SortItem[ 1];
-
+                TxCompareTool.SortItem<TransactionNetPO>[] flower = new TxCompareTool.SortItem[1];
                 int count = 0;
-                if(hasFlower){
+                if (hasFlower) {
                     count = 1;
                 }
                 int realCount = 1;
@@ -253,7 +263,7 @@ public class TxCompareTest {
                     }
                 }
                 thisItem.setFlower(flower);
-                if(flower.length > 0){
+                if (flower.length > 0) {
                     thisItem.setHasFlower(true);
                 }
                 item.setHasFlower(true);
@@ -319,38 +329,43 @@ public class TxCompareTest {
     }
 
     private static void insertArray(int index, TxCompareTool.SortResult result, int length, TxCompareTool.SortItem item, boolean insertFlowers) {
-        TxCompareTool.SortItem[] array = result.getArray();
-        int count = 1 + item.getFlower().length;
-        result.setIndex(result.getIndex() + count);
-        if (length >= index) {
-            for (int i = length - 1; i >= index; i--) {
-                array[i + count] = array[i];
+
+        try {
+            TxCompareTool.SortItem[] array = result.getArray();
+            int count = 1 + item.getFlower().length;
+            result.setIndex(result.getIndex() + count);
+            if (length >= index) {
+                for (int i = length - 1; i >= index; i--) {
+                    array[i + count] = array[i];
+                }
             }
-        }
-        array[index] = item;
-        if (null == item.getFlower() || !insertFlowers) {
+            array[index] = item;
+            if (null == item.getFlower() || !insertFlowers) {
+                return;
+            }
+            int add = 1;
+            for (TxCompareTool.SortItem f : item.getFlower()) {
+                array[index + add] = f;
+                add++;
+            }
+        } catch (ArrayIndexOutOfBoundsException e) {
             return;
-        }
-        int add = 1;
-        for (TxCompareTool.SortItem f : item.getFlower()) {
-            array[index + add] = f;
-            add++;
         }
     }
 
     //组装一些 时间 账户 一致，nonce是连续的交易
     private List<Transaction> createTxs(int count) throws Exception {
-        importPriKey("9ce21dad67e0f0af2599b41b515a7f7018059418bab892a7b68f283d489abc4b", password);//20 tNULSeBaMvEtDfvZuukDf2mVyfGo3DdiN8KLRG
-        importPriKey("477059f40708313626cccd26f276646e4466032cabceccbf571a7c46f954eb75", password);//21 tNULSeBaMnrs6JKrCy6TQdzYJZkMZJDng7QAsD
         Map map = CreateTx.createTransferTx(address21, address20, new BigInteger("100000"));
         long time = NulsDateUtils.getCurrentTimeSeconds();
+//        Long time = null;
         List<Transaction> list = new ArrayList<>();
         NulsHash hash = null;
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < count; i++) {
             Transaction tx = CreateTx.assemblyTransaction((List<CoinDTO>) map.get("inputs"), (List<CoinDTO>) map.get("outputs"), (String) map.get("remark"), hash, time);
             list.add(tx);
             hash = tx.getHash();
         }
+//        Thread.sleep(1000L);
         return list;
     }
 
@@ -367,7 +382,7 @@ public class TxCompareTest {
             Response cmdResp = ResponseMessageProcessor.requestAndResponse(ModuleE.AC.abbr, "ac_importAccountByPriKey", params);
             HashMap result = (HashMap) ((HashMap) cmdResp.getResponseData()).get("ac_importAccountByPriKey");
             String address = (String) result.get("address");
-            Log.debug("importPriKey success! address-{}", address);
+//            Log.debug("importPriKey success! address-{}", address);
         } catch (Exception e) {
             e.printStackTrace();
         }

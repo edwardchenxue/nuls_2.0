@@ -156,10 +156,11 @@ public class MessageUtil {
         signature.getP2PHKSignatures().add(p2PHKSignature);
         //交易签名拜占庭
         List<String> packAddressList = CommonUtil.getCurrentPackAddressList(chain);
+        CtxStatusPO ctxStatusPO = new CtxStatusPO(ctx,TxStatusEnum.UNCONFIRM.getStatus());
         if(signByzantineInChain(chain, ctx, signature, packAddressList)){
-            CtxStatusPO ctxStatusPO = new CtxStatusPO(ctx,TxStatusEnum.CONFIRMED.getStatus());
-            ctxStatusService.save(realHash, ctxStatusPO, handleChainId);
+            ctxStatusPO.setStatus(TxStatusEnum.CONFIRMED.getStatus());
         }
+        ctxStatusService.save(realHash, ctxStatusPO, handleChainId);
         NetWorkCall.broadcast(chainId, messageBody, excludeNodes, CommandConstant.BROAD_CTX_SIGN_MESSAGE, false);
         chain.getLogger().info("将收到的跨链交易签名广播给链接到的其他节点,Hash:{},签名:{}\n\n", nativeHex, signHex);
     }
@@ -222,7 +223,10 @@ public class MessageUtil {
                         chain.getLogger().info("签名拜占庭验证通过,将交易广播给其他链节点，最小验证人数:{}，签名数量为：{}", byzantineCount,signCount);
                     }
                 }else{
-                    long sendHeight = chainManager.getChainHeaderMap().get(chain.getChainId()).getHeight() + config.getSendHeight();
+                    long sendHeight = config.getSendHeight();
+                    if(chainManager.getChainHeaderMap().get(chain.getChainId()) != null){
+                        sendHeight += chainManager.getChainHeaderMap().get(chain.getChainId()).getHeight();
+                    }
                     SendCtxHashPO sendCtxHashPo = sendHeightService.get(sendHeight, chain.getChainId());
                     if(sendCtxHashPo == null){
                         List<NulsHash> hashList = new ArrayList<>();
