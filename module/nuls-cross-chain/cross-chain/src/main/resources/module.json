@@ -1,0 +1,8 @@
+{
+  "minNodeAmount":8,
+  "maxNodeAmount":10,
+  "maxInNode":10,
+  "moduleCode":"cc",
+  "crossCtxType":10,
+  "mainNet":false
+}
